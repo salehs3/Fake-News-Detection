@@ -6,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 
 # ── Page config ──
 st.set_page_config(
-    page_title="TruthLens — Fake News Detector",
+    page_title="TruthLens — AI Fake News Detector",
     page_icon="🔍",
     layout="wide"
 )
@@ -117,6 +117,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 MODEL_DIR = 'model'
+
+# ── Folder structure ──
+# Fake News Detection/
+# ├── streamlit_app.py
+# ├── model/
+# │   ├── tfidf_model.pkl
+# │   ├── bert_only_model.pkl
+# │   ├── meta_model.pkl
+# │   ├── vectorizer.pkl
+# │   ├── scaler.pkl
+# │   └── model_info.pkl
+# ├── data/
+# ├── static/
+# ├── notebooks/
+# └── src/
 
 # ── Load models ──
 @st.cache_resource
@@ -429,4 +444,4 @@ with col_side:
     """)
 
     st.markdown("---")
-    st.caption("Built by Saleh Salavudheen · UIUC CS · For educational use only")
+    st.caption("TruthLens · UIUC CS · For educational use only")
