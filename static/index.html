@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruthLens — American Political News Credibility Checker</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&family=Source+Serif+4:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --ink: #1a1a1a; --paper: #f7f4ef; --column: #e8e3da;
+    --accent: #c0392b; --accent-light: #f9eae9;
+    --real: #1a6b3c; --real-light: #e8f5ee;
+    --rule: #2c2c2c; --muted: #6b6b6b; --card: #ffffff;
+    --flag-red: #B22234; --flag-blue: #3C3B6E;
+    --bert: #7b2d8b; --bert-light: #f5eef8;
+    --tfidf: #1a5276; --tfidf-light: #eaf2fb;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 15px; line-height: 1.6; min-height: 100vh; }
+
+  .politics-banner { background: var(--flag-blue); color: #fff; text-align: center; padding: 0.5rem 1rem; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+  .politics-banner strong { color: #FFD700; }
+
+  .masthead { border-bottom: 3px solid var(--rule); padding: 0 2rem; }
+  .masthead-top { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--column); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+  .masthead-main { text-align: center; padding: 1.2rem 0 1rem; }
+  .masthead-name { font-family: 'Playfair Display', serif; font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 900; letter-spacing: -0.02em; line-height: 1; }
+  .masthead-name span { color: var(--accent); }
+  .masthead-sub { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-top: 0.3rem; }
+  .scope-badge { background: var(--flag-red); color: #fff; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; padding: 3px 10px; display: inline-block; margin-top: 0.5rem; }
+  .edition-strip { display: flex; justify-content: center; gap: 2rem; padding: 0.5rem 0; border-top: 1px solid var(--column); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .edition-strip span.active { color: var(--accent); font-weight: 600; border-bottom: 2px solid var(--accent); padding-bottom: 2px; }
+
+  .layout { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; display: grid; grid-template-columns: 1fr 320px; gap: 2rem; }
+  .section-label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); font-weight: 600; border-top: 2px solid var(--accent); padding-top: 0.4rem; margin-bottom: 1rem; }
+
+  .input-card, .result-card, .history-card { background: var(--card); border: 1px solid var(--column); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .result-card { display: none; }
+  .result-card.visible { display: block; }
+
+  .card-headline { font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; line-height: 1.2; margin-bottom: 0.3rem; }
+  .card-deck { font-family: 'Source Serif 4', serif; font-size: 0.9rem; color: var(--muted); margin-bottom: 1.2rem; line-height: 1.5; }
+
+  .scope-note { background: #f0f4ff; border-left: 3px solid var(--flag-blue); padding: 0.6rem 0.9rem; font-size: 12px; color: var(--flag-blue); margin-bottom: 1rem; }
+  .model-badge { background: var(--bert-light); border-left: 3px solid var(--bert); padding: 0.6rem 0.9rem; font-size: 12px; color: var(--bert); margin-bottom: 1rem; }
+
+  .tabs { display: flex; border-bottom: 2px solid var(--column); margin-bottom: 1rem; }
+  .tab { padding: 0.5rem 1rem; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; background: none; border-top: none; border-left: none; border-right: none; }
+  .tab.active { color: var(--ink); border-bottom-color: var(--ink); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  textarea, input[type="url"] { width: 100%; border: 1px solid var(--column); background: var(--paper); padding: 0.8rem; font-family: 'Source Serif 4', serif; font-size: 0.9rem; color: var(--ink); resize: vertical; outline: none; transition: border-color 0.15s; }
+  textarea { min-height: 180px; }
+  textarea:focus, input[type="url"]:focus { border-color: var(--ink); }
+  .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 0.3rem; }
+  .url-row { display: flex; gap: 0.5rem; }
+  .url-row input { flex: 1; height: 42px; }
+
+  .btn-analyze { width: 100%; margin-top: 1rem; padding: 0.85rem; background: var(--ink); color: #fff; font-family: 'Inter', sans-serif; font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 600; border: none; cursor: pointer; transition: background 0.15s; }
+  .btn-analyze:hover { background: var(--flag-blue); }
+  .btn-sm { padding: 0.5rem 1rem; background: var(--ink); color: #fff; font-family: 'Inter', sans-serif; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; border: none; cursor: pointer; white-space: nowrap; }
+  .disclaimer { font-size: 11px; color: var(--muted); margin-top: 0.6rem; font-style: italic; text-align: center; }
+
+  /* verdict */
+  .verdict-banner { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.2rem; margin-bottom: 1.2rem; }
+  .verdict-banner.fake { background: var(--accent-light); border-left: 4px solid var(--accent); }
+  .verdict-banner.real { background: var(--real-light); border-left: 4px solid var(--real); }
+  .verdict-icon { font-size: 2rem; line-height: 1; }
+  .verdict-label { font-family: 'Playfair Display', serif; font-size: 1.6rem; font-weight: 700; }
+  .verdict-label.fake { color: var(--accent); }
+  .verdict-label.real { color: var(--real); }
+  .verdict-conf { font-size: 12px; color: var(--muted); margin-top: 0.1rem; }
+
+  /* meters */
+  .meter-section { margin-bottom: 1.2rem; }
+  .meter-group-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.7rem; font-weight: 600; }
+  .meter-label { display: flex; justify-content: space-between; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.3rem; }
+  .meter-track { height: 8px; background: var(--column); overflow: hidden; margin-bottom: 0.6rem; }
+  .meter-fill { height: 100%; transition: width 0.8s ease; }
+  .meter-fill.fake { background: var(--accent); }
+  .meter-fill.real { background: var(--real); }
+  .meter-fill.bert { background: var(--bert); }
+  .meter-fill.tfidf { background: var(--tfidf); }
+  .meter-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+
+  /* model breakdown */
+  .breakdown-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.2rem; }
+  .breakdown-card { padding: 0.8rem; border: 1px solid var(--column); }
+  .breakdown-card.bert-card { background: var(--bert-light); border-color: var(--bert); }
+  .breakdown-card.tfidf-card { background: var(--tfidf-light); border-color: var(--tfidf); }
+  .breakdown-title { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; margin-bottom: 0.5rem; }
+  .breakdown-title.bert { color: var(--bert); }
+  .breakdown-title.tfidf { color: var(--tfidf); }
+  .breakdown-verdict { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 700; }
+  .breakdown-verdict.fake { color: var(--accent); }
+  .breakdown-verdict.real { color: var(--real); }
+  .breakdown-conf { font-size: 11px; color: var(--muted); }
+  .breakdown-desc { font-size: 11px; color: var(--muted); margin-top: 0.3rem; font-style: italic; }
+
+  /* word importance */
+  .importance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .importance-col-label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem; }
+  .importance-col-label.fake { color: var(--accent); }
+  .importance-col-label.real { color: var(--real); }
+  .word-bar-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+  .word-label { font-size: 12px; width: 90px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .word-track { flex: 1; height: 6px; background: var(--column); overflow: hidden; }
+  .word-fill-bar { height: 100%; }
+  .word-fill-bar.fake { background: var(--accent); }
+  .word-fill-bar.real { background: var(--real); }
+  .word-score { font-size: 11px; color: var(--muted); width: 36px; text-align: right; }
+  .no-words { font-size: 12px; color: var(--muted); font-style: italic; }
+
+  /* history */
+  .history-empty { font-size: 13px; color: var(--muted); font-style: italic; text-align: center; padding: 1rem 0; }
+  .history-item { padding: 0.7rem 0; border-bottom: 1px solid var(--column); }
+  .history-item:last-child { border-bottom: none; }
+  .history-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .history-text { font-family: 'Source Serif 4', serif; font-size: 13px; flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .history-badge { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; padding: 2px 7px; flex-shrink: 0; }
+  .history-badge.fake { background: var(--accent-light); color: var(--accent); }
+  .history-badge.real { background: var(--real-light); color: var(--real); }
+  .history-meta { font-size: 11px; color: var(--muted); margin-top: 0.2rem; }
+
+  /* sidebar */
+  .sidebar-card { background: var(--card); border: 1px solid var(--column); padding: 1.2rem; margin-bottom: 1.2rem; }
+  .sidebar-card h3 { font-family: 'Playfair Display', serif; font-size: 1rem; font-weight: 700; margin-bottom: 0.8rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--column); }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--column); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-num { font-weight: 600; font-size: 1.1rem; }
+  .stat-num.fake { color: var(--accent); }
+  .stat-num.real { color: var(--real); }
+  .tip-item { display: flex; gap: 0.6rem; margin-bottom: 0.6rem; font-size: 13px; }
+  .tip-icon { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+
+  .error-box { background: #fff3f3; border-left: 3px solid var(--accent); padding: 0.8rem 1rem; font-size: 13px; color: var(--accent); margin-bottom: 1rem; display: none; }
+  .error-box.visible { display: block; }
+
+  .loading { display: none; text-align: center; padding: 2rem; font-family: 'Source Serif 4', serif; font-size: 0.9rem; color: var(--muted); font-style: italic; }
+  .loading.visible { display: block; }
+  .loading-dots::after { content: '.'; animation: dots 1.5s steps(3,end) infinite; }
+  @keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+  footer { border-top: 3px solid var(--rule); text-align: center; padding: 1.5rem; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+  @media(max-width:768px) { .layout{grid-template-columns:1fr} .importance-grid,.meter-pair,.breakdown-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<div class="politics-banner">
+  <span>🇺🇸</span>
+  <span>Specialized for <strong>American Political News</strong> — Check Your Politics Headlines Here</span>
+  <span>🇺🇸</span>
+</div>
+
+<header class="masthead">
+  <div class="masthead-top">
+    <span id="today-date"></span>
+    <span style="font-style:italic;">Hybrid TF-IDF + BERT · Educational Use Only</span>
+    <span>99%+ Accuracy</span>
+  </div>
+  <div class="masthead-main">
+    <div class="masthead-name">Truth<span>Lens</span></div>
+    <div class="masthead-sub">AI-Powered News Credibility Analyzer</div>
+    <div><span class="scope-badge">🗳 U.S. Political News · Hybrid TF-IDF + BERT Model</span></div>
+  </div>
+  <div class="edition-strip">
+    <span class="active">Analysis</span><span>·</span><span>History</span><span>·</span><span>About</span>
+  </div>
+</header>
+
+<div class="layout">
+  <main>
+    <div class="section-label">Submit Article for Analysis</div>
+    <div class="input-card">
+      <div class="card-headline">Is Your Political News Real or Fake?</div>
+      <div class="card-deck">Paste any American political news article. Our hybrid model combines keyword analysis with deep semantic understanding for more robust results — including narrative journalism like the FT.</div>
+
+      <div class="scope-note">🗳 Best for U.S. political news — elections, Congress, White House, political figures. Results may be unreliable for sports, science, or entertainment.</div>
+      <div class="model-badge">🧠 Hybrid Model: TF-IDF catches keyword patterns · BERT understands writing context and meaning · Meta-classifier combines both for final verdict</div>
+
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('text',this)">Paste Article Text</button>
+        <button class="tab" onclick="switchTab('url',this)">Enter URL</button>
+      </div>
+
+      <div class="tab-panel active" id="panel-text">
+        <textarea id="article-text" placeholder="Paste the full text of a U.S. political news article here..." oninput="updateCount()"></textarea>
+        <div class="char-count"><span id="char-count">0</span> characters · <span id="word-count">0</span> words</div>
+      </div>
+
+      <div class="tab-panel" id="panel-url">
+        <div class="url-row">
+          <input type="url" id="article-url" placeholder="https://example.com/political-news-article">
+          <button class="btn-sm" onclick="fetchURL()">Fetch</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-top:0.5rem;font-style:italic;">Requires backend. Install: pip install newspaper3k</p>
+      </div>
+
+      <div class="error-box" id="error-box"></div>
+      <button class="btn-analyze" onclick="analyze()">▶ Analyze Article</button>
+      <p class="disclaimer">⚠ Detects writing style patterns, not factual accuracy. Always verify with trusted sources.</p>
+    </div>
+
+    <div class="loading" id="loading">
+      <div>Analyzing article<span class="loading-dots"></span></div>
+      <div style="font-size:11px;margin-top:0.5rem;">Running TF-IDF · Running BERT · Combining predictions</div>
+      <div style="font-size:11px;margin-top:0.3rem;color:var(--muted);">BERT analysis takes 5–15 seconds</div>
+    </div>
+
+    <div class="result-card" id="result-card">
+      <div class="section-label">Analysis Result</div>
+
+      <div class="verdict-banner" id="verdict-banner">
+        <div class="verdict-icon" id="verdict-icon"></div>
+        <div>
+          <div class="verdict-label" id="verdict-label"></div>
+          <div class="verdict-conf" id="verdict-conf"></div>
+        </div>
+      </div>
+
+      <!-- Model breakdown -->
+      <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.7rem;font-weight:600;">Model Breakdown</div>
+      <div class="breakdown-grid" style="margin-bottom:1.2rem;">
+        <div class="breakdown-card tfidf-card">
+          <div class="breakdown-title tfidf">TF-IDF Keywords</div>
+          <div class="breakdown-verdict" id="tfidf-verdict"></div>
+          <div class="breakdown-conf" id="tfidf-conf"></div>
+          <div class="breakdown-desc">Keyword frequency patterns</div>
+        </div>
+        <div class="breakdown-card bert-card">
+          <div class="breakdown-title bert">BERT Semantics</div>
+          <div class="breakdown-verdict" id="bert-verdict"></div>
+          <div class="breakdown-conf" id="bert-conf"></div>
+          <div class="breakdown-desc">Deep language understanding</div>
+        </div>
+      </div>
+
+      <!-- Final confidence -->
+      <div class="meter-section">
+        <div class="meter-group-label">Final Hybrid Confidence</div>
+        <div class="meter-pair">
+          <div>
+            <div class="meter-label"><span>Fake Probability</span><span id="fake-pct">—</span></div>
+            <div class="meter-track"><div class="meter-fill fake" id="fake-bar" style="width:0%"></div></div>
+          </div>
+          <div>
+            <div class="meter-label"><span>Real Probability</span><span id="real-pct">—</span></div>
+            <div class="meter-track"><div class="meter-fill real" id="real-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Word importance -->
+      <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:0.7rem;font-weight:600;">Word Importance (TF-IDF Component)</div>
+      <div class="importance-grid" style="margin-bottom:1.2rem;">
+        <div>
+          <div class="importance-col-label fake">⚠ Fake Indicators</div>
+          <div id="fake-words"></div>
+        </div>
+        <div>
+          <div class="importance-col-label real">✓ Real Indicators</div>
+          <div id="real-words"></div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;color:var(--muted);font-style:italic;border-top:1px solid var(--column);padding-top:0.8rem;">
+        Hybrid model: Logistic Regression on TF-IDF + BERT (all-MiniLM-L6-v2) · Meta-classifier combines both · Trained on 44,898 U.S. political news articles
+      </div>
+    </div>
+
+    <div class="section-label">Analysis History</div>
+    <div class="history-card">
+      <div class="history-empty" id="history-empty">No articles analyzed yet.</div>
+      <div id="history-list"></div>
+    </div>
+  </main>
+
+  <aside>
+    <div class="sidebar-card">
+      <h3>Session Statistics</h3>
+      <div class="stat-row"><span>Articles Analyzed</span><span class="stat-num" id="stat-total">0</span></div>
+      <div class="stat-row"><span>Flagged as Fake</span><span class="stat-num fake" id="stat-fake">0</span></div>
+      <div class="stat-row"><span>Verified as Real</span><span class="stat-num real" id="stat-real">0</span></div>
+      <div class="stat-row"><span>Avg. Confidence</span><span class="stat-num" id="stat-conf">—</span></div>
+    </div>
+
+    <div class="sidebar-card" style="background:#f0f4ff;border-color:var(--flag-blue);">
+      <h3 style="color:var(--flag-blue);">🗳 Scope: U.S. Politics Only</h3>
+      <div style="font-size:13px;line-height:1.7;color:#444;">
+        <p>✓ Elections &amp; campaigns</p>
+        <p>✓ Congress &amp; legislation</p>
+        <p>✓ White House &amp; executive branch</p>
+        <p>✓ U.S. political figures</p>
+        <p>✓ Narrative political journalism (FT, NYT)</p>
+        <p style="margin-top:0.5rem;color:var(--accent);">✗ Sports, science, entertainment → unreliable</p>
+      </div>
+    </div>
+
+    <div class="sidebar-card" style="background:var(--bert-light);border-color:var(--bert);">
+      <h3 style="color:var(--bert);">🧠 Why Hybrid?</h3>
+      <div style="font-size:13px;line-height:1.7;color:#444;">
+        <p style="margin-bottom:0.4rem;"><strong>TF-IDF alone</strong> flags narrative journalism as fake because of unusual words like "notorious" or "brash".</p>
+        <p><strong>BERT understands context</strong> — it knows "notorious lawyer" in an investigative piece is different from sensational tabloid language.</p>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <h3>Model Limitations</h3>
+      <div class="tip-item"><span class="tip-icon">!</span><span>Still trained on U.S. political news only</span></div>
+      <div class="tip-item"><span class="tip-icon">!</span><span>Detects style patterns, not factual accuracy</span></div>
+      <div class="tip-item"><span class="tip-icon">!</span><span>BERT adds ~5–15 seconds per analysis</span></div>
+      <div class="tip-item"><span class="tip-icon">!</span><span>Always cross-check with trusted sources</span></div>
+    </div>
+  </aside>
+</div>
+
+<footer>
+  TruthLens · Built by Saleh Salavudheen · UIUC Computer Science · Hybrid TF-IDF + BERT · For Educational Use Only
+</footer>
+
+<script>
+  const API = 'http://localhost:5000';
+  document.getElementById('today-date').textContent =
+    new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-'+name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  function updateCount() {
+    const t = document.getElementById('article-text').value;
+    document.getElementById('char-count').textContent = t.length.toLocaleString();
+    document.getElementById('word-count').textContent = t.trim() ? t.trim().split(/\s+/).length.toLocaleString() : 0;
+  }
+
+  function fetchURL() { alert('URL fetching: ensure newspaper3k is installed on the backend.'); }
+  function showError(msg) { const b=document.getElementById('error-box'); b.textContent=msg; b.classList.add('visible'); }
+  function hideError() { document.getElementById('error-box').classList.remove('visible'); }
+
+  let history = [];
+  function addHistory(text, verdict, confidence) {
+    history.unshift({text, verdict, confidence, time: new Date()});
+    renderHistory(); updateStats();
+  }
+  function renderHistory() {
+    const list = document.getElementById('history-list');
+    document.getElementById('history-empty').style.display = history.length ? 'none' : 'block';
+    list.innerHTML = history.slice(0,10).map(h => `
+      <div class="history-item">
+        <div class="history-row">
+          <div class="history-text">${h.text.slice(0,120)}${h.text.length>120?'…':''}</div>
+          <span class="history-badge ${h.verdict.toLowerCase()}">${h.verdict}</span>
+        </div>
+        <div class="history-meta">${h.confidence}% confidence · ${h.time.toLocaleTimeString()}</div>
+      </div>`).join('');
+  }
+  function updateStats() {
+    const total = history.length;
+    const fake = history.filter(h=>h.verdict==='FAKE').length;
+    const avgConf = total ? Math.round(history.reduce((s,h)=>s+h.confidence,0)/total) : null;
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-fake').textContent = fake;
+    document.getElementById('stat-real').textContent = total-fake;
+    document.getElementById('stat-conf').textContent = avgConf!==null ? avgConf+'%' : '—';
+  }
+
+  function renderWordBars(words, containerId, type) {
+    const c = document.getElementById(containerId);
+    if (!words || !words.length) { c.innerHTML = '<div class="no-words">No significant indicators found</div>'; return; }
+    const max = words[0].score || 1;
+    c.innerHTML = words.map(w => `
+      <div class="word-bar-row">
+        <span class="word-label" title="${w.word}">${w.word}</span>
+        <div class="word-track"><div class="word-fill-bar ${type}" style="width:${(w.score/max*100).toFixed(0)}%"></div></div>
+        <span class="word-score">${w.score.toFixed(1)}</span>
+      </div>`).join('');
+  }
+
+  function setModelBreakdown(data) {
+    const tfidfVerdict = data.tfidf_fake_pct > 50 ? 'FAKE' : 'REAL';
+    const bertVerdict = data.bert_fake_pct > 50 ? 'FAKE' : 'REAL';
+    const tfidfConf = data.tfidf_fake_pct > 50 ? data.tfidf_fake_pct : data.tfidf_real_pct;
+    const bertConf = data.bert_fake_pct > 50 ? data.bert_fake_pct : data.bert_real_pct;
+
+    const tv = document.getElementById('tfidf-verdict');
+    tv.textContent = tfidfVerdict === 'FAKE' ? 'Likely Fake' : 'Likely Real';
+    tv.className = 'breakdown-verdict ' + tfidfVerdict.toLowerCase();
+    document.getElementById('tfidf-conf').textContent = tfidfConf.toFixed(1) + '% confidence';
+
+    const bv = document.getElementById('bert-verdict');
+    bv.textContent = bertVerdict === 'FAKE' ? 'Likely Fake' : 'Likely Real';
+    bv.className = 'breakdown-verdict ' + bertVerdict.toLowerCase();
+    document.getElementById('bert-conf').textContent = bertConf.toFixed(1) + '% confidence';
+  }
+
+  async function analyze() {
+    hideError();
+    const text = document.getElementById('article-text').value.trim();
+    if (text.length < 50) { showError('Please enter at least 50 characters for a reliable result.'); return; }
+
+    document.getElementById('loading').classList.add('visible');
+    document.getElementById('result-card').classList.remove('visible');
+
+    try {
+      const res = await fetch(`${API}/api/predict`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({text})
+      });
+      if (!res.ok) { const e=await res.json(); throw new Error(e.error||'Server error'); }
+      const data = await res.json();
+      renderResult(data, text);
+    } catch(err) {
+      document.getElementById('loading').classList.remove('visible');
+      showError(`Error: ${err.message}. Make sure your Flask server is running on port 5000.`);
+    }
+  }
+
+  function renderResult(data, text) {
+    document.getElementById('loading').classList.remove('visible');
+    const isFake = data.verdict === 'FAKE';
+
+    const banner = document.getElementById('verdict-banner');
+    banner.className = 'verdict-banner ' + (isFake ? 'fake' : 'real');
+    document.getElementById('verdict-icon').textContent = isFake ? '⚠' : '✓';
+    const label = document.getElementById('verdict-label');
+    label.textContent = isFake ? 'Likely Fake News' : 'Likely Credible';
+    label.className = 'verdict-label ' + (isFake ? 'fake' : 'real');
+    document.getElementById('verdict-conf').textContent =
+      `${data.confidence}% confidence · ${data.word_count.toLocaleString()} words · Hybrid TF-IDF + BERT`;
+
+    setModelBreakdown(data);
+
+    setTimeout(() => {
+      document.getElementById('fake-pct').textContent = data.fake_pct + '%';
+      document.getElementById('real-pct').textContent = data.real_pct + '%';
+      document.getElementById('fake-bar').style.width = data.fake_pct + '%';
+      document.getElementById('real-bar').style.width = data.real_pct + '%';
+    }, 100);
+
+    renderWordBars(data.fake_words, 'fake-words', 'fake');
+    renderWordBars(data.real_words, 'real-words', 'real');
+
+    document.getElementById('result-card').classList.add('visible');
+    addHistory(text, data.verdict, data.confidence);
+  }
+</script>
+</body>
+</html>
