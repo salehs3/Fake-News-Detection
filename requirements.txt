@@ -1,7 +1,8 @@
-flask
-flask-cors
+streamlit
 scikit-learn
-pandas
-numpy
 sentence-transformers
 torch
+numpy
+pandas
+newspaper3k
+lxml[html_clean]
